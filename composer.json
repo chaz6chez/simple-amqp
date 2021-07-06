@@ -1,0 +1,22 @@
+{
+  "name": "casual/amqp",
+  "description": "Simple amqp client library.",
+  "require": {
+    "php": ">=7.2",
+    "ext-json": "*",
+    "workerman/rabbitmq": "^1.0",
+    "monolog/monolog": "^2.2"
+  },
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "chaz6chez",
+      "email": "250220719@qq.com"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "SimpleAmqp\\" : "src/"
+    }
+  }
+}
