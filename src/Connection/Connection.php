@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace SimpleAmqp\Connection;
 
 use Bunny\Client;
+use Bunny\Exception\ClientException;
 use Throwable;
 
 class Connection extends AbstractConnection {
@@ -17,13 +18,20 @@ class Connection extends AbstractConnection {
 
     public function close(): void
     {
-        if(
-            $this->_client instanceof Client and
-            $this->_client->isConnected()
-        ){
-            $this->_client->disconnect();
+        try {
+            if($this->_client instanceof Client){
+                if ($this->_client->isConnected()) {
+                    $this->_client->disconnect()->done(function () {
+                        $this->_client->stop();
+                    });
+                }
+                if ($this->_client->isConnected()) {
+                    $this->_client->run();
+                }
+            }
+        }catch (Throwable $throwable){} finally {
+            $this->_client = null;
         }
-        $this->_client = null;
     }
 
     /**
@@ -32,10 +40,18 @@ class Connection extends AbstractConnection {
      */
     public function connect() : Client
     {
-        if(!$this->client()->isConnected()){
+        try {
+            if(!$this->client()->isConnected()){
+                $this->client()->connect();
+            }
+        }catch (ClientException $exception){
+            $this->_client = null;
             $this->client()->connect();
+        }catch (Throwable $throwable){
+            throw $throwable;
+        }finally {
+            return $this->_client;
         }
-        return $this->_client;
     }
 
     public function error(\Throwable $throwable): bool
