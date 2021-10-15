@@ -6,6 +6,7 @@ namespace SimpleAmqp;
 use Bunny\Channel;
 use Bunny\Message;
 use Kernel\Utils\Instance;
+use Psr\Log\LoggerInterface;
 use React\Promise\PromiseInterface;
 use Workerman\RabbitMQ\Client;
 use SimpleAmqp\Message as BaseMessage;
@@ -18,6 +19,13 @@ abstract class Builder extends Instance {
     protected $_consumer_tag;
     protected $_message;
 
+    protected $_logger;
+
+    public function __invoke(LoggerInterface $logger)
+    {
+        $this->_logger = $logger;
+    }
+
     protected function _initConfig()
     {
         $className = get_called_class();
@@ -26,9 +34,7 @@ abstract class Builder extends Instance {
         $this->_message->setExchange($this->_exchange_name ?? $className);
         $this->_message->setExchangeType($this->_exchange_type ?? Constants::DIRECT);
         $this->_message->setRoutingKey($this->_routing_key ?? $className);
-        if($this->_consumer_tag){
-            $this->_message->setConsumerTag($this->_consumer_tag);
-        }
+        $this->_message->setConsumerTag($this->_consumer_tag ?? $className);
         $this->_message->setCallback([$this,'callback']);
     }
 
@@ -42,7 +48,11 @@ abstract class Builder extends Instance {
 
     final public function consumer() : Consumer
     {
-        return Co()->get(Consumer::class);
+        $res = Co()->get(Consumer::class);
+        if($this->_logger){
+            $res->setLogger($this->_logger);
+        }
+        return $res;
     }
 
     final public function consume() : void
@@ -52,12 +62,20 @@ abstract class Builder extends Instance {
 
     final public function producer() : Producer
     {
-        return Co()->get(Producer::class);
+        $res = Co()->get(Producer::class);
+        if($this->_logger){
+            $res->setLogger($this->_logger);
+        }
+        return $res;
     }
 
     final public function asyncProducer() : AsyncProducer
     {
-        return Co()->get(AsyncProducer::class);
+        $res = Co()->get(AsyncProducer::class);
+        if($this->_logger){
+            $res->setLogger($this->_logger);
+        }
+        return $res;
     }
 
     final public function produce(string $data, bool $close = true) : bool
