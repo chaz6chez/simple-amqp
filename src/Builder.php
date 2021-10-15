@@ -20,11 +20,12 @@ abstract class Builder extends Instance {
 
     protected function _initConfig()
     {
+        $className = get_called_class();
         $this->_message = $this->_getAbstractMessage();
-        $this->_message->setQueue($this->_queue_name);
-        $this->_message->setExchange($this->_exchange_name);
-        $this->_message->setExchangeType($this->_exchange_type);
-        $this->_message->setRoutingKey($this->_routing_key);
+        $this->_message->setQueue($this->_queue_name ?? $className);
+        $this->_message->setExchange($this->_exchange_name ?? $className);
+        $this->_message->setExchangeType($this->_exchange_type ?? Constants::DIRECT);
+        $this->_message->setRoutingKey($this->_routing_key ?? $className);
         if($this->_consumer_tag){
             $this->_message->setConsumerTag($this->_consumer_tag);
         }
