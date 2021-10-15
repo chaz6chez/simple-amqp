@@ -14,6 +14,7 @@ abstract class Builder extends Instance {
     protected $_exchange_name;
     protected $_exchange_type;
     protected $_queue_name;
+    protected $_routing_key;
     protected $_consumer_tag;
     protected $_message;
 
@@ -23,6 +24,7 @@ abstract class Builder extends Instance {
         $this->_message->setQueue($this->_queue_name);
         $this->_message->setExchange($this->_exchange_name);
         $this->_message->setExchangeType($this->_exchange_type);
+        $this->_message->setRoutingKey($this->_routing_key);
         if($this->_consumer_tag){
             $this->_message->setConsumerTag($this->_consumer_tag);
         }
@@ -57,7 +59,7 @@ abstract class Builder extends Instance {
         return Co()->get(AsyncProducer::class);
     }
 
-    final public function produce(string $data, bool $close = false) : bool
+    final public function produce(string $data, bool $close = true) : bool
     {
         $this->_getAbstractMessage()->setBody($data);
         return $this->producer()->produce($this->_getAbstractMessage(), $close);
@@ -68,10 +70,10 @@ abstract class Builder extends Instance {
      * @param bool $close
      * @return bool|PromiseInterface
      */
-    final public function asyncProduce(string $data, bool $close = false) : PromiseInterface
+    final public function asyncProduce(string $data, bool $close = true) : PromiseInterface
     {
         $this->_getAbstractMessage()->setBody($data);
-        return $this->asyncProducer()->produce($this->_getAbstractMessage(), $close)->then();
+        return $this->asyncProducer()->produce($this->_getAbstractMessage(), $close);
     }
 
     abstract public function encode($data);

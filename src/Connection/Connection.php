@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace SimpleAmqp\Connection;
 
 use Bunny\Client;
-use Utils\Tools;
+use Throwable;
 
 class Connection extends AbstractConnection {
     public function client(): Client
@@ -17,29 +17,35 @@ class Connection extends AbstractConnection {
 
     public function close(): void
     {
+        if(
+            $this->_client instanceof Client and
+            $this->_client->isConnected()
+        ){
+            $this->_client->disconnect();
+        }
         $this->_client = null;
     }
 
     /**
      * @return Client
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function connect() : Client
     {
-        try {
-            if(!$this->client()->isConnected()){
-                $this->client()->connect();
-            }
-            return $this->_client;
-        }catch (\Throwable $throwable){
-            $this->error($throwable);
-            throw $throwable;
+        if(!$this->client()->isConnected()){
+            $this->client()->connect();
         }
+        return $this->_client;
     }
 
     public function error(\Throwable $throwable): bool
     {
-        if(DEBUG) dump($throwable);
-        Tools::log('rabbitmq',$throwable->getMessage(),runtime_path() . '/log');
+        if($this->getLogger()){
+            $this->getLogger()->error(
+                "[Sync]{$throwable->getCode()}:{$throwable->getMessage()}",
+                $throwable->getTrace()
+            );
+        }
+        return false;
     }
 }

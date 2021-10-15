@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace SimpleAmqp\Connection;
 
 use Bunny\Client;
-use Utils\Tools;
 use Workerman\RabbitMQ\Client as AsyncClient;
 
 class AsyncConnection extends AbstractConnection {
@@ -66,8 +65,12 @@ class AsyncConnection extends AbstractConnection {
 
     public function error(\Throwable $throwable): bool
     {
-        if(DEBUG) dump($throwable);
-        Tools::log('rabbitmq_async',$throwable->getMessage(),runtime_path() . '/log');
+        if($this->getLogger()){
+            $this->getLogger()->error(
+                "[Async]{$throwable->getCode()}:{$throwable->getMessage()}",
+                $throwable->getTrace()
+            );
+        }
         return false;
     }
 }

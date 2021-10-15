@@ -21,11 +21,15 @@ abstract class AbstractConnection {
         return $this->_config;
     }
 
-    final public function getLogger() : LoggerInterface
+    final public function getLogger() : ?LoggerInterface
     {
         return $this->_logger;
     }
 
+    /**
+     * @param LoggerInterface $logger
+     * @return static
+     */
     final public function setLogger(LoggerInterface $logger): AbstractConnection
     {
         $this->_logger = $logger;

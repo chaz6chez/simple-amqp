@@ -62,6 +62,21 @@ class Consumer extends AsyncConnection {
                 }
             );
         })->then(function (Channel $channel) use ($abstractMessage) {
+            return $channel->queueBind(
+                $abstractMessage->getQueue(),
+                $abstractMessage->getExchange(),
+                $abstractMessage->getRoutingKey(),
+                $abstractMessage->isNowait(),
+                $abstractMessage->getArguments()
+            )->then(
+                function () use ($channel) {
+                    return $channel;
+                },
+                function (\Throwable $throwable){
+                    $this->error($throwable);
+                }
+            );
+        })->then(function (Channel $channel) use ($abstractMessage) {
             return $channel->qos(
                 $abstractMessage->getPrefetchSize(),
                 $abstractMessage->getPrefetchCount(),
