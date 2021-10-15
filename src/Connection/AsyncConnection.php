@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace SimpleAmqp\Connection;
 
-use Bunny\Client;
-use Workerman\RabbitMQ\Client as AsyncClient;
+use SimpleAmqp\SyncClient as Client;
+use SimpleAmqp\AsyncClient;
 
 class AsyncConnection extends AbstractConnection {
 
