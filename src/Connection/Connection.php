@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace SimpleAmqp\Connection;
 
-use SimpleAmqp\SyncClient as Client;
+use SimpleAmqp\Client\SyncClient as Client;
 use Bunny\Exception\ClientException;
 use Throwable;
 

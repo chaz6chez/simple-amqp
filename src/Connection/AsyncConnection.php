@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace SimpleAmqp\Connection;
 
-use SimpleAmqp\SyncClient as Client;
-use SimpleAmqp\AsyncClient;
+use SimpleAmqp\Client\SyncClient as Client;
+use SimpleAmqp\Client\AsyncClient;
 
 class AsyncConnection extends AbstractConnection {
 
