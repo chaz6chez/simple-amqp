@@ -1,110 +1,86 @@
 <?php
 namespace SimpleAmqp\Client;
 
-use Bunny\AbstractClient;
 use Bunny\ClientStateEnum;
 use Bunny\Exception\ClientException;
 use Bunny\Protocol\HeartbeatFrame;
 use Bunny\Protocol\MethodConnectionStartFrame;
 use Bunny\Protocol\MethodConnectionTuneFrame;
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
-use React\EventLoop\LoopInterface;
-use React\EventLoop\Timer\Timer as ReactTimer;
-use Workerman\Lib\Timer;
 use React\Promise;
 use Workerman\Events\EventInterface;
 use Workerman\Worker;
+use Workerman\Lib\Timer;
 
-
-class AsyncClient extends AbstractClient
+class AsyncClient extends \Bunny\Async\Client
 {
-
-    /** @var LoopInterface */
-    protected $eventLoop;
-
-    /** @var Promise\PromiseInterface|null */
-    protected $flushWriteBufferPromise;
-
-    /** @var callable[] */
-    protected $awaitCallbacks;
-
-    /** @var ReactTimer */
-    protected $stopTimer;
-
-    /** @var Timer */
-    protected $heartbeatTimer;
-
     /**
-     * AsyncClient constructor.
+     * Constructor.
+     *
      * @param array $options see {@link AbstractClient} for available options
      * @param LoggerInterface|null $log if argument is passed, AMQP communication will be recorded in debug level
      */
     public function __construct(array $options = [], LoggerInterface $log = null)
     {
-        $options["async"] = true;
+        $options['async'] =  true;
         $this->eventLoop = Worker::$globalEvent;
-        parent::__construct($options, $log);
-
-    }
-
-    /**
-     * Destructor.
-     *
-     * Clean shutdown = disconnect if connected.
-     */
-    public function __destruct()
-    {
-        if ($this->isConnected()) {
-            $this->disconnect();
-        }
-    }
-
-    /**
-     * Initializes instance.
-     */
-    protected function init()
-    {
-        parent::init();
-        $this->flushWriteBufferPromise = null;
-        $this->awaitCallbacks = [];
-        $this->disconnectPromise = null;
-    }
-
-    /**
-     * Calls {@link eventLoop}'s run() method. Processes messages for at most $maxSeconds.
-     *
-     * @param float $maxSeconds
-     */
-    public function run($maxSeconds = null)
-    {
-        if ($maxSeconds !== null) {
-            $this->stopTimer = $this->eventLoop->addTimer($maxSeconds, function () {
-                $this->stop();
-            });
+        if (!isset($options['host'])) {
+            $options['host'] = '127.0.0.1';
         }
 
-        $this->eventLoop->run();
-    }
-
-    /**
-     * Calls {@link eventLoop}'s stop() method.
-     */
-    public function stop()
-    {
-        if ($this->stopTimer) {
-            $this->eventLoop->cancelTimer($this->stopTimer);
-            $this->stopTimer = null;
+        if (!isset($options['port'])) {
+            $options['port'] = 5672;
         }
 
-        $this->eventLoop->stop();
-    }
+        if (!isset($options['vhost'])) {
+            if (isset($options['virtual_host'])) {
+                $options['vhost'] = $options['virtual_host'];
+                unset($options['virtual_host']);
+            } elseif (isset($options['path'])) {
+                $options['vhost'] = $options['path'];
+                unset($options['path']);
+            } else {
+                $options['vhost'] = '/';
+            }
+        }
 
-    /**
-     * Reads data from stream to read buffer.
-     */
-    protected function feedReadBuffer()
-    {
-        throw new \LogicException("feedReadBuffer() in async client does not make sense.");
+        if (!isset($options['user'])) {
+            if (isset($options['username'])) {
+                $options['user'] = $options['username'];
+                unset($options['username']);
+            } else {
+                $options['user'] = 'guest';
+            }
+        }
+
+        if (!isset($options['password'])) {
+            if (isset($options['pass'])) {
+                $options['password'] = $options['pass'];
+                unset($options['pass']);
+            } else {
+                $options['password'] = 'guest';
+            }
+        }
+
+        if (!isset($options['timeout'])) {
+            $options['timeout'] = 1;
+        }
+
+        if (!isset($options['heartbeat'])) {
+            $options['heartbeat'] = 60.0;
+        } elseif ($options['heartbeat'] >= 2**15) {
+            throw new InvalidArgumentException('Heartbeat too high: the value is a signed int16.');
+        }
+
+        if (is_callable($options['heartbeat_callback'] ?? null)) {
+            $this->options['heartbeat_callback'] = $options['heartbeat_callback'];
+        }
+
+        $this->options = $options;
+        $this->log = $log;
+
+        $this->init();
     }
 
     /**
@@ -154,14 +130,14 @@ class AsyncClient extends AbstractClient
     public function connect()
     {
         if ($this->state !== ClientStateEnum::NOT_CONNECTED) {
-            return Promise\reject(new ClientException("Client already connected/connecting."));
+            return Promise\reject(new ClientException('Client already connected/connecting.'));
         }
 
         $this->state = ClientStateEnum::CONNECTING;
         $this->writer->appendProtocolHeader($this->writeBuffer);
 
         try {
-            $this->eventLoop->add($this->getStream(), EventInterface::EV_READ, [$this, "onDataAvailable"]);
+            $this->eventLoop->add($this->getStream(), EventInterface::EV_READ, [$this, 'onDataAvailable']);
         } catch (\Exception $e) {
             return Promise\reject($e);
         }
@@ -180,13 +156,13 @@ class AsyncClient extends AbstractClient
             if ($tune->channelMax > 0) {
                 $this->channelMax = $tune->channelMax;
             }
-            return $this->connectionTuneOk($tune->channelMax, $tune->frameMax, $this->options["heartbeat"]);
+            return $this->connectionTuneOk($tune->channelMax, $tune->frameMax, $this->options['heartbeat']);
 
         })->then(function () {
-            return $this->connectionOpen($this->options["vhost"]);
+            return $this->connectionOpen($this->options['vhost']);
 
         })->then(function () {
-            $this->heartbeatTimer = Timer::add($this->options["heartbeat"], [$this, "onHeartbeat"], null, true);
+            $this->heartbeatTimer = Timer::add($this->options['heartbeat'], [$this, 'onHeartbeat'], null, true);
 
             $this->state = ClientStateEnum::CONNECTED;
             return $this;
@@ -204,14 +180,14 @@ class AsyncClient extends AbstractClient
      * @param string $replyText
      * @return Promise\PromiseInterface
      */
-    public function disconnect($replyCode = 0, $replyText = "")
+    public function disconnect($replyCode = 0, $replyText = '')
     {
         if ($this->state === ClientStateEnum::DISCONNECTING) {
             return $this->disconnectPromise;
         }
 
         if ($this->state !== ClientStateEnum::CONNECTED) {
-            return Promise\reject(new ClientException("Client is not connected."));
+            return Promise\reject(new ClientException('Client is not connected.'));
         }
 
         $this->state = ClientStateEnum::DISCONNECTING;
@@ -231,7 +207,7 @@ class AsyncClient extends AbstractClient
 
         return $this->disconnectPromise = Promise\all($promises)->then(function () use ($replyCode, $replyText) {
             if (!empty($this->channels)) {
-                throw new \LogicException("All channels have to be closed by now.");
+                throw new \LogicException('All channels have to be closed by now.');
             }
 
             return $this->connectionClose($replyCode, $replyText, 0, 0);
@@ -243,48 +219,6 @@ class AsyncClient extends AbstractClient
         });
     }
 
-    /**
-     * Adds callback to process incoming frames.
-     *
-     * Callback is passed instance of {@link \Bunny\Protocol|AbstractFrame}. If callback returns TRUE, frame is said to
-     * be handled and further handlers (other await callbacks, default handler) won't be called.
-     *
-     * @param callable $callback
-     */
-    public function addAwaitCallback(callable $callback)
-    {
-        $this->awaitCallbacks[] = $callback;
-    }
-
-    /**
-     * {@link eventLoop}'s read stream callback notifying client that data from server arrived.
-     */
-    public function onDataAvailable()
-    {
-        $this->read();
-
-        while (($frame = $this->reader->consumeFrame($this->readBuffer)) !== null) {
-            foreach ($this->awaitCallbacks as $k => $callback) {
-                if ($callback($frame) === true) {
-                    unset($this->awaitCallbacks[$k]);
-                    continue 2; // CONTINUE WHILE LOOP
-                }
-            }
-
-            if ($frame->channel === 0) {
-                $this->onFrameReceived($frame);
-
-            } else {
-                if (!isset($this->channels[$frame->channel])) {
-                    throw new ClientException(
-                        "Received frame #{$frame->type} on closed channel #{$frame->channel}."
-                    );
-                }
-
-                $this->channels[$frame->channel]->onFrameReceived($frame);
-            }
-        }
-    }
 
     /**
      * Callback when heartbeat timer timed out.
@@ -292,7 +226,7 @@ class AsyncClient extends AbstractClient
     public function onHeartbeat()
     {
         $now = microtime(true);
-        $nextHeartbeat = ($this->lastWrite ?: $now) + $this->options["heartbeat"];
+        $nextHeartbeat = ($this->lastWrite ?: $now) + $this->options['heartbeat'];
 
         if ($now >= $nextHeartbeat) {
             $this->writer->appendFrame(new HeartbeatFrame(), $this->writeBuffer);
@@ -301,9 +235,8 @@ class AsyncClient extends AbstractClient
                     $this->options['heartbeat_callback']->call($this);
                 }
             });
-
         } else {
-            Timer::add($nextHeartbeat - $now, [$this, "onHeartbeat"], null, false);
+            Timer::add($nextHeartbeat - $now, [$this, 'onHeartbeat'], null, false);
         }
     }
 
