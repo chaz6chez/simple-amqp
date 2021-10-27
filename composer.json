@@ -4,8 +4,9 @@
   "require": {
     "php": ">=7.2",
     "ext-json": "*",
-    "workerman/rabbitmq": "^1.0",
-    "casual/framework": "^2.0"
+    "casual/framework": "^2.0",
+    "bunny/bunny": "^0.5",
+    "psr/log": "^1.0"
   },
   "license": "MIT",
   "authors": [
