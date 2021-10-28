@@ -14,6 +14,32 @@ class Producer extends Connection {
     public function produce(AbstractMessage $abstractMessage, bool $close = true) : bool
     {
         try {
+            $this->_getChannel()->exchangeDeclare(
+                $abstractMessage->getExchange(),
+                $abstractMessage->getExchangeType(),
+                $abstractMessage->isPassive(),
+                $abstractMessage->isDurable(),
+                $abstractMessage->isAutoDelete(),
+                $abstractMessage->isInternal(),
+                $abstractMessage->isNowait(),
+                $abstractMessage->getArguments()
+            );
+            $this->_getChannel()->queueDeclare(
+                $abstractMessage->getQueue(),
+                $abstractMessage->isPassive(),
+                $abstractMessage->isDurable(),
+                $abstractMessage->isExclusive(),
+                $abstractMessage->isAutoDelete(),
+                $abstractMessage->isNowait(),
+                $abstractMessage->getArguments()
+            );
+            $this->_getChannel()->queueBind(
+                $abstractMessage->getQueue(),
+                $abstractMessage->getExchange(),
+                $abstractMessage->getRoutingKey(),
+                $abstractMessage->isNowait(),
+                $abstractMessage->getArguments()
+            );
             return $this->_getChannel()->publish(
                 $abstractMessage->getBody(),
                 $abstractMessage->getHeaders(),

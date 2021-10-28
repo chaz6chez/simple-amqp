@@ -6,7 +6,7 @@ namespace SimpleAmqp;
 use Bunny\Channel;
 use SimpleAmqp\Connection\AsyncConnection;
 use React\Promise\PromiseInterface;
-use Workerman\RabbitMQ\Client;
+use SimpleAmqp\Client\AsyncClient;
 
 class AsyncProducer extends AsyncConnection {
     protected $_channel;
@@ -41,7 +41,7 @@ class AsyncProducer extends AsyncConnection {
                 }
             );
         } else{
-            return $this->client()->connect()->then(function (Client $client){
+            return $this->client()->connect()->then(function (AsyncClient $client){
                 return $client->channel()->then(function (Channel $channel){
                     $this->_setChannel($channel);
                     return $channel;
@@ -62,6 +62,42 @@ class AsyncProducer extends AsyncConnection {
                     $abstractMessage->isDurable(),
                     $abstractMessage->isAutoDelete(),
                     $abstractMessage->isInternal(),
+                    $abstractMessage->isNowait(),
+                    $abstractMessage->getArguments()
+                )->then(
+                    function () use ($channel) {
+                        return $channel;
+                    },
+                    function (\Throwable $throwable){
+                        $this->_setChannel();
+                        $this->close();
+                        return $this->error($throwable);
+                    }
+                );
+            })->then(function (Channel $channel) use ($abstractMessage) {
+                return $channel->queueDeclare(
+                    $abstractMessage->getQueue(),
+                    $abstractMessage->isPassive(),
+                    $abstractMessage->isDurable(),
+                    $abstractMessage->isExclusive(),
+                    $abstractMessage->isAutoDelete(),
+                    $abstractMessage->isNowait(),
+                    $abstractMessage->getArguments()
+                )->then(
+                    function () use ($channel) {
+                        return $channel;
+                    },
+                    function (\Throwable $throwable){
+                        $this->_setChannel();
+                        $this->close();
+                        return $this->error($throwable);
+                    }
+                );
+            })->then(function (Channel $channel) use ($abstractMessage) {
+                return $channel->queueBind(
+                    $abstractMessage->getQueue(),
+                    $abstractMessage->getExchange(),
+                    $abstractMessage->getRoutingKey(),
                     $abstractMessage->isNowait(),
                     $abstractMessage->getArguments()
                 )->then(

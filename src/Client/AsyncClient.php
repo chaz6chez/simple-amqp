@@ -1,16 +1,16 @@
 <?php
 namespace SimpleAmqp\Client;
 
+use Bunny\AbstractClient;
 use Bunny\ClientStateEnum;
 use Bunny\Exception\ClientException;
 use Bunny\Protocol\HeartbeatFrame;
 use Bunny\Protocol\MethodConnectionStartFrame;
 use Bunny\Protocol\MethodConnectionTuneFrame;
-use InvalidArgumentException;
+use Kernel\AbstractProcess;
 use Psr\Log\LoggerInterface;
 use React\Promise;
 use Workerman\Events\EventInterface;
-use Workerman\Worker;
 use Workerman\Lib\Timer;
 
 class AsyncClient extends \Bunny\Async\Client
@@ -24,63 +24,8 @@ class AsyncClient extends \Bunny\Async\Client
     public function __construct(array $options = [], LoggerInterface $log = null)
     {
         $options['async'] =  true;
-        $this->eventLoop = Worker::$globalEvent;
-        if (!isset($options['host'])) {
-            $options['host'] = '127.0.0.1';
-        }
-
-        if (!isset($options['port'])) {
-            $options['port'] = 5672;
-        }
-
-        if (!isset($options['vhost'])) {
-            if (isset($options['virtual_host'])) {
-                $options['vhost'] = $options['virtual_host'];
-                unset($options['virtual_host']);
-            } elseif (isset($options['path'])) {
-                $options['vhost'] = $options['path'];
-                unset($options['path']);
-            } else {
-                $options['vhost'] = '/';
-            }
-        }
-
-        if (!isset($options['user'])) {
-            if (isset($options['username'])) {
-                $options['user'] = $options['username'];
-                unset($options['username']);
-            } else {
-                $options['user'] = 'guest';
-            }
-        }
-
-        if (!isset($options['password'])) {
-            if (isset($options['pass'])) {
-                $options['password'] = $options['pass'];
-                unset($options['pass']);
-            } else {
-                $options['password'] = 'guest';
-            }
-        }
-
-        if (!isset($options['timeout'])) {
-            $options['timeout'] = 1;
-        }
-
-        if (!isset($options['heartbeat'])) {
-            $options['heartbeat'] = 60.0;
-        } elseif ($options['heartbeat'] >= 2**15) {
-            throw new InvalidArgumentException('Heartbeat too high: the value is a signed int16.');
-        }
-
-        if (is_callable($options['heartbeat_callback'] ?? null)) {
-            $this->options['heartbeat_callback'] = $options['heartbeat_callback'];
-        }
-
-        $this->options = $options;
-        $this->log = $log;
-
-        $this->init();
+        $this->eventLoop = AbstractProcess::$globalEvent;
+        AbstractClient::__construct($options, $log);
     }
 
     /**
@@ -91,7 +36,7 @@ class AsyncClient extends \Bunny\Async\Client
      *
      * @return Promise\PromiseInterface
      */
-    protected function flushWriteBuffer()
+    protected function flushWriteBuffer() : Promise\PromiseInterface
     {
         if ($this->flushWriteBufferPromise) {
             return $this->flushWriteBufferPromise;
@@ -127,7 +72,7 @@ class AsyncClient extends \Bunny\Async\Client
      *
      * @return Promise\PromiseInterface
      */
-    public function connect()
+    public function connect(): Promise\PromiseInterface
     {
         if ($this->state !== ClientStateEnum::NOT_CONNECTED) {
             return Promise\reject(new ClientException('Client already connected/connecting.'));
@@ -180,7 +125,7 @@ class AsyncClient extends \Bunny\Async\Client
      * @param string $replyText
      * @return Promise\PromiseInterface
      */
-    public function disconnect($replyCode = 0, $replyText = '')
+    public function disconnect($replyCode = 0, $replyText = ''): Promise\PromiseInterface
     {
         if ($this->state === ClientStateEnum::DISCONNECTING) {
             return $this->disconnectPromise;
@@ -223,7 +168,7 @@ class AsyncClient extends \Bunny\Async\Client
     /**
      * Callback when heartbeat timer timed out.
      */
-    public function onHeartbeat()
+    public function onHeartbeat(): void
     {
         $now = microtime(true);
         $nextHeartbeat = ($this->lastWrite ?: $now) + $this->options['heartbeat'];

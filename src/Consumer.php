@@ -7,14 +7,14 @@ use Bunny\Channel;
 use Bunny\Message;
 use Bunny\Protocol\MethodBasicConsumeOkFrame;
 use SimpleAmqp\Connection\AsyncConnection;
-use Workerman\RabbitMQ\Client;
+use SimpleAmqp\Client\AsyncClient;
 
 class Consumer extends AsyncConnection {
 
     public function consume(AbstractMessage $abstractMessage) : void
     {
         $this->client()->connect()->then(
-            function (Client $client){
+            function (AsyncClient $client){
                 return $client->channel()->then(function (Channel $channel){
                     return $channel;
                 },function (\Throwable $throwable){
@@ -92,7 +92,7 @@ class Consumer extends AsyncConnection {
         })->then(function (Channel $channel) use ($abstractMessage) {
             //Waiting for messages
             $channel->consume(
-                function (Message $message, Channel $channel, Client $client) use ($abstractMessage) {
+                function (Message $message, Channel $channel, AsyncClient $client) use ($abstractMessage) {
                     $tag = ($abstractMessage->getCallback())($message, $channel, $client);
                     switch ($tag) {
                         case Constants::ACK:

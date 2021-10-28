@@ -8,7 +8,7 @@ use Bunny\Message;
 use Kernel\Utils\Instance;
 use Psr\Log\LoggerInterface;
 use React\Promise\PromiseInterface;
-use Workerman\RabbitMQ\Client;
+use SimpleAmqp\Client\AsyncClient as Client;
 use SimpleAmqp\Message as BaseMessage;
 
 abstract class Builder extends Instance {
