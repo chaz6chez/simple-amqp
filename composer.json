@@ -22,7 +22,7 @@
   },
   "scripts": {
     "post-autoload-dump": [
-      "@php -r \"file_exists('config/mq.php') || copy('mq.php', 'config/mq.php');\""
+      "@php -r \"!is_dir('config') || file_exists('config/mq.php') || copy('mq.php', 'config/mq.php');\""
     ]
   }
 }
