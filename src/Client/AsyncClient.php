@@ -108,7 +108,12 @@ class AsyncClient extends \Bunny\Async\Client
 
         })->then(function () {
             if(!$this->heartbeatTimer){
-                $this->heartbeatTimer = Timer::add($this->options['heartbeat'], [$this, 'onHeartbeat'], null, true);
+                $this->heartbeatTimer = Timer::add(
+                    $this->options['heartbeat'],
+                    [$this, 'onHeartbeat'],
+                    null,
+                    false
+                );
             }
             $this->state = ClientStateEnum::CONNECTED;
             return $this;
@@ -174,6 +179,12 @@ class AsyncClient extends \Bunny\Async\Client
         $nextHeartbeat = ($this->lastWrite ?: $now) + $this->options['heartbeat'];
 
         if ($now >= $nextHeartbeat) {
+            $this->heartbeatTimer = Timer::add(
+                $this->options['heartbeat'],
+                [$this, 'onHeartbeat'],
+                null,
+                false
+            );
             $this->writer->appendFrame(new HeartbeatFrame(), $this->writeBuffer);
             $this->flushWriteBuffer()->done(function () {
                 if (is_callable($this->options['heartbeat_callback'] ?? null)) {
@@ -181,7 +192,12 @@ class AsyncClient extends \Bunny\Async\Client
                 }
             });
         } else {
-            Timer::add($nextHeartbeat - $now, [$this, 'onHeartbeat'], null, false);
+            $this->heartbeatTimer = Timer::add(
+                $nextHeartbeat - $now,
+                [$this, 'onHeartbeat'],
+                null,
+                false
+            );
         }
     }
 
