@@ -18,6 +18,9 @@ abstract class Builder extends Instance {
     protected $_routing_key;
     protected $_consumer_tag;
     protected $_message;
+    protected $_prefetch_size;
+    protected $_prefetch_count;
+    protected $_is_global;
 
     protected $_logger;
 
@@ -29,13 +32,24 @@ abstract class Builder extends Instance {
     protected function _initConfig()
     {
         $className = get_called_class();
-        $this->_message = $this->_getAbstractMessage();
-        $this->_message->setQueue($this->_queue_name ?? $className);
-        $this->_message->setExchange($this->_exchange_name ?? $className);
-        $this->_message->setExchangeType($this->_exchange_type ?? Constants::DIRECT);
-        $this->_message->setRoutingKey($this->_routing_key ?? $className);
-        $this->_message->setConsumerTag($this->_consumer_tag ?? $className);
-        $this->_message->setCallback([$this,'callback']);
+        $this->_getAbstractMessage()
+            ->setQueue($this->_queue_name ?? $className);
+        $this->_getAbstractMessage()
+            ->setExchange($this->_exchange_name ?? $className);
+        $this->_getAbstractMessage()
+            ->setExchangeType($this->_exchange_type ?? Constants::DIRECT);
+        $this->_getAbstractMessage()
+            ->setRoutingKey($this->_routing_key ?? $className);
+        $this->_getAbstractMessage()
+            ->setConsumerTag($this->_consumer_tag ?? $className);
+        $this->_getAbstractMessage()
+            ->setPrefetchSize($this->_prefetch_size ?? $this->_message->getPrefetchSize());
+        $this->_getAbstractMessage()
+            ->setPrefetchCount($this->_prefetch_count ?? $this->_message->getPrefetchCount());
+        $this->_getAbstractMessage()
+            ->setGlobal($this->_is_global ?? $this->_message->isGlobal());
+        $this->_getAbstractMessage()
+            ->setCallback([$this,'callback']);
     }
 
     protected function _getAbstractMessage() : AbstractMessage
@@ -49,6 +63,7 @@ abstract class Builder extends Instance {
     final public function consumer() : Consumer
     {
         $res = Co()->get(Consumer::class);
+        $res->setName($this->_getAbstractMessage()->getQueue());
         if($this->_logger){
             $res->setLogger($this->_logger);
         }
@@ -63,6 +78,7 @@ abstract class Builder extends Instance {
     final public function producer() : Producer
     {
         $res = Co()->get(Producer::class);
+        $res->setName($this->_getAbstractMessage()->getQueue());
         if($this->_logger){
             $res->setLogger($this->_logger);
         }
@@ -72,6 +88,7 @@ abstract class Builder extends Instance {
     final public function asyncProducer() : AsyncProducer
     {
         $res = Co()->get(AsyncProducer::class);
+        $res->setName($this->_getAbstractMessage()->getQueue());
         if($this->_logger){
             $res->setLogger($this->_logger);
         }

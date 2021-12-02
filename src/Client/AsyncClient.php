@@ -15,17 +15,28 @@ use Workerman\Lib\Timer;
 
 class AsyncClient extends \Bunny\Async\Client
 {
+    protected $name;
+
     /**
-     * Constructor.
-     *
-     * @param array $options see {@link AbstractClient} for available options
-     * @param LoggerInterface|null $log if argument is passed, AMQP communication will be recorded in debug level
+     * AsyncClient constructor.
+     * @param array $options
+     * @param string $name
+     * @param LoggerInterface|null $log
      */
-    public function __construct(array $options = [], LoggerInterface $log = null)
+    public function __construct(array $options = [], string $name = 'default', LoggerInterface $log = null)
     {
         $options['async'] =  true;
+        $this->name = $name;
         $this->eventLoop = AbstractProcess::$globalEvent;
         AbstractClient::__construct($options, $log);
+    }
+
+    /**
+     * @return string
+     */
+    public function getName() : string
+    {
+        return $this->name;
     }
 
     /**
@@ -109,10 +120,10 @@ class AsyncClient extends \Bunny\Async\Client
         })->then(function () {
             if(!$this->heartbeatTimer){
                 $this->heartbeatTimer = Timer::add(
-                    $this->options['heartbeat'],
+                    isset($this->options['heartbeat']) ? $this->options['heartbeat'] : 60,
                     [$this, 'onHeartbeat'],
                     null,
-                    false
+                    true
                 );
             }
             $this->state = ClientStateEnum::CONNECTED;
@@ -175,30 +186,30 @@ class AsyncClient extends \Bunny\Async\Client
      */
     public function onHeartbeat(): void
     {
-        $now = microtime(true);
-        $nextHeartbeat = ($this->lastWrite ?: $now) + $this->options['heartbeat'];
-
-        if ($now >= $nextHeartbeat) {
-            $this->heartbeatTimer = Timer::add(
-                $this->options['heartbeat'],
-                [$this, 'onHeartbeat'],
-                null,
-                false
-            );
-            $this->writer->appendFrame(new HeartbeatFrame(), $this->writeBuffer);
-            $this->flushWriteBuffer()->done(function () {
-                if (is_callable($this->options['heartbeat_callback'] ?? null)) {
-                    $this->options['heartbeat_callback']->call($this);
+        $this->writer->appendFrame(new HeartbeatFrame(), $this->writeBuffer);
+        $this->flushWriteBuffer()->then(
+            function () {
+                if (is_callable(
+                    isset($this->options['heartbeat_callback'])
+                        ? $this->options['heartbeat_callback']
+                        : null
+                )) {
+                    ($this->options['heartbeat_callback'])($this);
+                }
+            },
+            function (\Throwable $throwable){
+                if($this->log){
+                    $this->log->notice(
+                        'OnHeartbeatFailed',
+                        [
+                            $throwable->getMessage(),
+                            $throwable->getCode(),
+                            $throwable->getFile(),
+                            $throwable->getLine()
+                        ]
+                    );
                 }
             });
-        } else {
-            $this->heartbeatTimer = Timer::add(
-                $nextHeartbeat - $now,
-                [$this, 'onHeartbeat'],
-                null,
-                false
-            );
-        }
     }
 
 }

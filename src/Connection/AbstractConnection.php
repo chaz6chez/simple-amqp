@@ -10,6 +10,23 @@ abstract class AbstractConnection {
     protected $_client;
     protected $_logger;
     protected $_config;
+    protected $_name;
+
+    /**
+     * @return string
+     */
+    public function getName(): string
+    {
+        return $this->_name;
+    }
+
+    /**
+     * @param string $name
+     */
+    public function setName(string $name): void
+    {
+        $this->_name = $name;
+    }
 
     public function __construct()
     {
