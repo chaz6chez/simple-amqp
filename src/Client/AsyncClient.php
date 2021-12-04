@@ -159,6 +159,8 @@ class AsyncClient extends \Bunny\Async\Client
             foreach ($this->channels as $channel) {
                 $promises[] = $channel->close($replyCode, $replyText);
             }
+        }else{
+            AbstractProcess::kill($replyText);
         }
 
         if ($this->heartbeatTimer) {
