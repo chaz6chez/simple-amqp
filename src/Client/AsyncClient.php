@@ -155,17 +155,17 @@ class AsyncClient extends \Bunny\Async\Client
 
         $promises = [];
 
+        if ($this->heartbeatTimer) {
+            Timer::del($this->heartbeatTimer);
+            $this->heartbeatTimer = null;
+        }
+
         if ($replyCode === 0) {
             foreach ($this->channels as $channel) {
                 $promises[] = $channel->close($replyCode, $replyText);
             }
         }else{
             AbstractProcess::kill($replyText);
-        }
-
-        if ($this->heartbeatTimer) {
-            Timer::del($this->heartbeatTimer);
-            $this->heartbeatTimer = null;
         }
 
         return $this->disconnectPromise = Promise\all($promises)->then(function () use ($replyCode, $replyText) {
