@@ -165,7 +165,7 @@ class AsyncClient extends \Bunny\Async\Client
                 $promises[] = $channel->close($replyCode, $replyText);
             }
         }else{
-            AbstractProcess::kill($replyText);
+            AbstractProcess::kill("{$replyCode} - {$replyText}");
         }
 
         return $this->disconnectPromise = Promise\all($promises)->then(function () use ($replyCode, $replyText) {
