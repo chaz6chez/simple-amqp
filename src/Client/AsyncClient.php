@@ -1,7 +1,10 @@
 <?php
+declare(strict_types=1);
+
 namespace SimpleAmqp\Client;
 
 use Bunny\AbstractClient;
+use Bunny\Async\Client;
 use Bunny\ClientStateEnum;
 use Bunny\Exception\ClientException;
 use Bunny\Protocol\HeartbeatFrame;
@@ -13,9 +16,25 @@ use React\Promise;
 use Workerman\Events\EventInterface;
 use Workerman\Lib\Timer;
 
-class AsyncClient extends \Bunny\Async\Client
+class AsyncClient extends Client
 {
+    /** @var string */
     protected $name;
+
+    /** @var EventInterface */
+    protected $eventLoop;
+
+    /** @var Promise\PromiseInterface|null */
+    protected $flushWriteBufferPromise;
+
+    /** @var callable[] */
+    protected $awaitCallbacks;
+
+    /** @var Timer */
+    protected $stopTimer;
+
+    /** @var Timer */
+    protected $heartbeatTimer;
 
     /**
      * AsyncClient constructor.
@@ -25,10 +44,22 @@ class AsyncClient extends \Bunny\Async\Client
      */
     public function __construct(array $options = [], string $name = 'default', LoggerInterface $log = null)
     {
-        $options['async'] =  true;
+        $options['async'] = true;
         $this->name = $name;
-        $this->eventLoop = AbstractProcess::$globalEvent;
         AbstractClient::__construct($options, $log);
+        $this->eventLoop = AbstractProcess::$globalEvent;
+    }
+
+    /**
+     * Destructor.
+     *
+     * Clean shutdown = disconnect if connected.
+     */
+    public function __destruct()
+    {
+        if ($this->isConnected()) {
+            $this->disconnect();
+        }
     }
 
     /**
@@ -37,6 +68,54 @@ class AsyncClient extends \Bunny\Async\Client
     public function getName() : string
     {
         return $this->name;
+    }
+
+    /**
+     * Initializes instance.
+     */
+    protected function init()
+    {
+        parent::init();
+        $this->flushWriteBufferPromise = null;
+        $this->awaitCallbacks = [];
+        $this->disconnectPromise = null;
+    }
+
+    /**
+     * Calls {@link eventLoop}'s run() method. Processes messages for at most $maxSeconds.
+     *
+     * @param float $maxSeconds
+     */
+    public function run($maxSeconds = null)
+    {
+        if ($maxSeconds !== null) {
+            $this->stopTimer = Timer::add($maxSeconds, function (){
+                $this->stop();
+            });
+        }
+
+        $this->eventLoop->loop();
+    }
+
+    /**
+     * Calls {@link eventLoop}'s stop() method.
+     */
+    public function stop()
+    {
+        if ($this->stopTimer) {
+            $this->stopTimer = Timer::del($this->stopTimer);
+            $this->stopTimer = null;
+        }
+
+        $this->eventLoop->destroy();
+    }
+
+    /**
+     * Reads data from stream to read buffer.
+     */
+    protected function feedReadBuffer()
+    {
+        throw new \LogicException("feedReadBuffer() in async client does not make sense.");
     }
 
     /**
@@ -83,10 +162,10 @@ class AsyncClient extends \Bunny\Async\Client
      *
      * @return Promise\PromiseInterface
      */
-    public function connect(): Promise\PromiseInterface
+    public function connect() : Promise\PromiseInterface
     {
         if ($this->state !== ClientStateEnum::NOT_CONNECTED) {
-            return Promise\reject(new ClientException('Client already connected/connecting.'));
+            return Promise\reject(new ClientException("Client already connected/connecting."));
         }
 
         $this->state = ClientStateEnum::CONNECTING;
@@ -112,22 +191,20 @@ class AsyncClient extends \Bunny\Async\Client
             if ($tune->channelMax > 0) {
                 $this->channelMax = $tune->channelMax;
             }
-            return $this->connectionTuneOk($tune->channelMax, $tune->frameMax, $this->options['heartbeat']);
+            return $this->connectionTuneOk($tune->channelMax, $tune->frameMax, $this->options["heartbeat"]);
 
         })->then(function () {
-            return $this->connectionOpen($this->options['vhost']);
+            return $this->connectionOpen($this->options["vhost"]);
 
         })->then(function () {
-            if(!$this->heartbeatTimer){
-                $this->heartbeatTimer = Timer::add(
-                    isset($this->options['heartbeat']) ? $this->options['heartbeat'] : 60,
-                    [$this, 'onHeartbeat'],
-                    null,
-                    true
-                );
-            }
+            $this->heartbeatTimer = Timer::add(
+                isset($this->options['heartbeat']) ? $this->options['heartbeat'] : 60,
+                [$this, 'onHeartbeat']
+            );
+
             $this->state = ClientStateEnum::CONNECTED;
             return $this;
+
         });
     }
 
@@ -141,52 +218,103 @@ class AsyncClient extends \Bunny\Async\Client
      * @param string $replyText
      * @return Promise\PromiseInterface
      */
-    public function disconnect($replyCode = 0, $replyText = ''): Promise\PromiseInterface
+    public function disconnect($replyCode = 0, $replyText = '') : Promise\PromiseInterface
     {
         if ($this->state === ClientStateEnum::DISCONNECTING) {
             return $this->disconnectPromise;
         }
 
         if ($this->state !== ClientStateEnum::CONNECTED) {
-            return Promise\reject(new ClientException('Client is not connected.'));
+            return Promise\reject(new ClientException("Client is not connected."));
         }
 
         $this->state = ClientStateEnum::DISCONNECTING;
 
         $promises = [];
 
+        if ($replyCode === 0) {
+            foreach ($this->channels as $channel) {
+                $promises[] = $channel->close($replyCode, $replyText);
+            }
+        }
+        else{
+            foreach($this->channels as $channel){
+                $this->removeChannel($channel->getChannelId());
+            }
+        }
+
         if ($this->heartbeatTimer) {
             Timer::del($this->heartbeatTimer);
             $this->heartbeatTimer = null;
         }
 
-        if ($replyCode === 0) {
-            foreach ($this->channels as $channel) {
-                $promises[] = $channel->close($replyCode, $replyText);
-            }
-        }else{
-            AbstractProcess::kill("{$replyCode} - {$replyText}");
-        }
-
         return $this->disconnectPromise = Promise\all($promises)->then(function () use ($replyCode, $replyText) {
             if (!empty($this->channels)) {
-                throw new \LogicException('All channels have to be closed by now.');
+                throw new \LogicException("All channels have to be closed by now.");
             }
-
+            if($replyCode !== 0){
+                return null;
+            }
             return $this->connectionClose($replyCode, $replyText, 0, 0);
-        })->then(function () {
+        })->then(function () use ($replyCode, $replyText){
             $this->eventLoop->del($this->getStream(), EventInterface::EV_READ);
             $this->closeStream();
             $this->init();
+            if($replyCode !== 0){
+                AbstractProcess::kill("{$replyCode}-{$replyText}");
+            }
             return $this;
         });
     }
 
+    /**
+     * Adds callback to process incoming frames.
+     *
+     * Callback is passed instance of {@link \Bunny\Protocol|AbstractFrame}. If callback returns TRUE, frame is said to
+     * be handled and further handlers (other await callbacks, default handler) won't be called.
+     *
+     * @param callable $callback
+     */
+    public function addAwaitCallback(callable $callback)
+    {
+        $this->awaitCallbacks[] = $callback;
+    }
+
+    /**
+     * {@link eventLoop}'s read stream callback notifying client that data from server arrived.
+     */
+    public function onDataAvailable()
+    {
+        $this->read();
+
+        while (($frame = $this->reader->consumeFrame($this->readBuffer)) !== null) {
+            foreach ($this->awaitCallbacks as $k => $callback) {
+                if ($callback($frame) === true) {
+                    unset($this->awaitCallbacks[$k]);
+                    continue 2; // CONTINUE WHILE LOOP
+                }
+            }
+
+            if ($frame->channel === 0) {
+                $this->onFrameReceived($frame);
+
+            } else {
+                if (!isset($this->channels[$frame->channel])) {
+                    throw new ClientException(
+                        "Received frame #{$frame->type} on closed channel #{$frame->channel}."
+                    );
+                }
+
+                $this->channels[$frame->channel]->onFrameReceived($frame);
+            }
+        }
+    }
 
     /**
      * Callback when heartbeat timer timed out.
+     * @param int $count
      */
-    public function onHeartbeat(): void
+    public function onHeartbeat(int $count = 0): void
     {
         $this->writer->appendFrame(new HeartbeatFrame(), $this->writeBuffer);
         $this->flushWriteBuffer()->then(
@@ -199,7 +327,7 @@ class AsyncClient extends \Bunny\Async\Client
                     ($this->options['heartbeat_callback'])($this);
                 }
             },
-            function (\Throwable $throwable){
+            function (\Throwable $throwable) use ($count){
                 if($this->log){
                     $this->log->notice(
                         'OnHeartbeatFailed',
@@ -211,6 +339,7 @@ class AsyncClient extends \Bunny\Async\Client
                         ]
                     );
                 }
+                AbstractProcess::kill("OnHeartbeatFailed-{$throwable->getMessage()}");
             });
     }
 
