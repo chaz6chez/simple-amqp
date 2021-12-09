@@ -85,6 +85,12 @@ abstract class Builder extends Instance {
         return $res;
     }
 
+    final public function produce(string $data, bool $close = true) : bool
+    {
+        $this->_getAbstractMessage()->setBody($data);
+        return $this->producer()->produce($this->_getAbstractMessage(), $close);
+    }
+
     final public function asyncProducer() : AsyncProducer
     {
         $res = Co()->get(AsyncProducer::class);
@@ -93,12 +99,6 @@ abstract class Builder extends Instance {
             $res->setLogger($this->_logger);
         }
         return $res;
-    }
-
-    final public function produce(string $data, bool $close = true) : bool
-    {
-        $this->_getAbstractMessage()->setBody($data);
-        return $this->producer()->produce($this->_getAbstractMessage(), $close);
     }
 
     /**

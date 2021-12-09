@@ -7,15 +7,10 @@ use Kernel\AbstractProcess;
 
 abstract class AbstractConsumer extends AbstractProcess {
     protected static $_check = false;
-    /**
-     * @var Consumer
-     */
-    protected $_consumer;
 
     protected static $_debug = false;
-    /**
-     * @var Builder
-     */
+
+    /** @var Builder */
     protected $_builder;
 
     public static function check(?bool $check = null) : bool
@@ -49,9 +44,9 @@ abstract class AbstractConsumer extends AbstractProcess {
         if(self::check() === false){
             self::check(true);
             $this->_dump('> Detecting rabbitmq connection ...');
-            if(!$this->_consumer->checker()){
+            if(!$this->_builder->consumer()->checker()){
                 $this->_dump('? ' . get_called_class());
-                $this->_dump('? ' . $this->_consumer->getError()->getMessage());
+                $this->_dump('? ' . $this->_builder->consumer()->getError()->getMessage());
                 $this->_dump('> Rabbitmq connection failed ...');
                 exit();
             }
@@ -62,16 +57,18 @@ abstract class AbstractConsumer extends AbstractProcess {
 
     public function onStart(...$param): void
     {
+        $this->_init();
         $this->_builder->consume();
     }
 
     public function onReload(...$param): void
     {
-        $this->_consumer->reconnect();
+        $this->_builder->consumer()->reconnect();
     }
 
     public function onStop(...$param): void
     {
-        $this->_consumer->close();
+        $this->_builder->consumer()->close();
+        $this->_builder = null;
     }
 }
