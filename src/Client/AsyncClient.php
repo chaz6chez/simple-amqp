@@ -312,9 +312,8 @@ class AsyncClient extends Client
 
     /**
      * Callback when heartbeat timer timed out.
-     * @param int $count
      */
-    public function onHeartbeat(int $count = 0): void
+    public function onHeartbeat(): void
     {
         $this->writer->appendFrame(new HeartbeatFrame(), $this->writeBuffer);
         $this->flushWriteBuffer()->then(
@@ -327,7 +326,7 @@ class AsyncClient extends Client
                     ($this->options['heartbeat_callback'])($this);
                 }
             },
-            function (\Throwable $throwable) use ($count){
+            function (\Throwable $throwable){
                 if($this->log){
                     $this->log->notice(
                         'OnHeartbeatFailed',
