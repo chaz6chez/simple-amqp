@@ -262,7 +262,7 @@ class AsyncClient extends Client
             $this->closeStream();
             $this->init();
             if($replyCode !== 0){
-                AbstractProcess::stopAll(0,"RabbitMQ client connected: [{$replyCode}] {$replyText}");
+                AbstractProcess::stopAll(0,"RabbitMQ client disconnected: [{$replyCode}] {$replyText}");
             }
             return $this;
         });
