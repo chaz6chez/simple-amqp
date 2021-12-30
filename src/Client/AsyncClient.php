@@ -262,7 +262,7 @@ class AsyncClient extends Client
             $this->closeStream();
             $this->init();
             if($replyCode !== 0){
-                AbstractProcess::stopAll(0,'(pid:' . posix_getpid() . ") {$replyCode}-{$replyText}");
+                AbstractProcess::stopAll(0,"RabbitMQ client connected: [{$replyCode}] {$replyText}");
             }
             return $this;
         });
@@ -339,7 +339,7 @@ class AsyncClient extends Client
                         ]
                     );
                 }
-                AbstractProcess::stopAll(0,'(pid:' . posix_getpid() . ") {$throwable->getCode()}-{$throwable->getMessage()}");
+                AbstractProcess::stopAll(0,"RabbitMQ client heartbeat failed: [{$throwable->getCode()}] {$throwable->getMessage()}");
             });
     }
 
