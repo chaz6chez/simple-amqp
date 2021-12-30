@@ -24,6 +24,9 @@ class AsyncClient extends Client
     /** @var EventInterface */
     protected $eventLoop;
 
+    /** @var LoggerInterface|null  */
+    protected $log;
+
     /** @var Promise\PromiseInterface|null */
     protected $flushWriteBufferPromise;
 
@@ -46,7 +49,8 @@ class AsyncClient extends Client
     {
         $options['async'] = true;
         $this->name = $name;
-        AbstractClient::__construct($options, $log);
+        $this->log = $log;
+        AbstractClient::__construct($options);
         $this->eventLoop = AbstractProcess::$globalEvent;
     }
 
@@ -197,10 +201,7 @@ class AsyncClient extends Client
             return $this->connectionOpen($this->options["vhost"]);
 
         })->then(function () {
-            $this->heartbeatTimer = Timer::add(
-                isset($this->options['heartbeat']) ? $this->options['heartbeat'] : 60,
-                [$this, 'onHeartbeat']
-            );
+            $this->heartbeatTimer = Timer::add($this->options['heartbeat'], [$this, 'onHeartbeat']);
 
             $this->state = ClientStateEnum::CONNECTED;
             return $this;
@@ -261,7 +262,7 @@ class AsyncClient extends Client
             $this->closeStream();
             $this->init();
             if($replyCode !== 0){
-                AbstractProcess::kill("{$replyCode}-{$replyText}");
+                AbstractProcess::stopAll(0,'(pid:' . posix_getpid() . ") {$replyCode}-{$replyText}");
             }
             return $this;
         });
@@ -338,7 +339,7 @@ class AsyncClient extends Client
                         ]
                     );
                 }
-                AbstractProcess::kill("OnHeartbeatFailed-{$throwable->getMessage()}");
+                AbstractProcess::stopAll(0,'(pid:' . posix_getpid() . ") {$throwable->getCode()}-{$throwable->getMessage()}");
             });
     }
 
